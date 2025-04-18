@@ -164,6 +164,8 @@ cython_debug/
 # data
 *.parquet
 *.pickle
-
+data/
 # project environment
 env_recsys_start/
+s4/
+.s4/
