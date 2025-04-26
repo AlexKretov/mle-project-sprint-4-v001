@@ -1,70 +1,75 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Music Search</title>
+    <title>Music Selector Pro</title>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', system-ui, sans-serif;
             background: #f8f9fa;
             margin: 0;
             padding: 20px;
+            min-height: 100vh;
         }
 
         .search-container {
             max-width: 800px;
-            margin: 40px auto;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            padding: 30px;
+            margin: 0 auto;
+            padding: 20px;
         }
 
         .search-box {
             position: relative;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
         }
 
         #searchInput {
             width: 100%;
-            padding: 16px 24px;
+            padding: 18px 25px;
             font-size: 18px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            transition: border-color 0.3s ease;
+            border: 2px solid #dee2e6;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
         }
 
         #searchInput:focus {
             outline: none;
-            border-color: #007bff;
-            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+            border-color: #4dabf7;
+            box-shadow: 0 0 0 4px rgba(77, 171, 247, 0.2);
         }
 
         #results {
-            max-height: 500px;
+            margin-top: 25px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            max-height: 60vh;
             overflow-y: auto;
-            border: 1px solid #e9ecef;
-            border-radius: 8px;
-            margin-top: 20px;
         }
 
         .track-item {
-            padding: 16px 24px;
-            border-bottom: 1px solid #e9ecef;
-            transition: background 0.2s;
+            padding: 18px 25px;
+            border-bottom: 1px solid #f1f3f5;
+            cursor: pointer;
+            transition: all 0.2s ease;
             display: flex;
             align-items: center;
         }
 
-        .track-item:last-child {
-            border-bottom: none;
-        }
-
         .track-item:hover {
             background: #f8f9fa;
+            transform: translateX(5px);
+        }
+
+        .track-item.selected {
+            background: #e7f5ff;
+            border-left: 6px solid #4dabf7;
+            box-shadow: inset 4px 0 8px rgba(77, 171, 247, 0.1);
         }
 
         .track-info {
             flex-grow: 1;
+            margin-right: 15px;
         }
 
         .track-title {
@@ -79,17 +84,78 @@
             color: #6c757d;
         }
 
+        .selection-panel {
+            position: fixed;
+            right: 30px;
+            top: 30px;
+            width: 350px;
+            background: white;
+            padding: 25px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.09);
+            border-radius: 14px;
+            border: 1px solid #f1f3f5;
+        }
+
+        .selected-track {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px;
+            margin: 8px 0;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+            transition: transform 0.2s ease;
+        }
+
+        .selected-track:hover {
+            transform: translateX(3px);
+        }
+
+        .remove-btn {
+            color: #ff6b6b;
+            cursor: pointer;
+            font-size: 20px;
+            padding: 5px;
+            transition: color 0.2s ease;
+        }
+
+        .remove-btn:hover {
+            color: #ff5252;
+        }
+
+        #process-btn {
+            margin-top: 20px;
+            width: 100%;
+            padding: 16px;
+            background: #4dabf7;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        #process-btn:hover {
+            background: #339af0;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(51, 154, 240, 0.3);
+        }
+
         .no-results {
-            padding: 20px;
+            padding: 25px;
             text-align: center;
-            color: #6c757d;
+            color: #868e96;
             font-style: italic;
         }
 
         .error-message {
-            color: #dc3545;
-            padding: 20px;
+            color: #ff6b6b;
+            padding: 25px;
             text-align: center;
+            font-weight: 500;
         }
     </style>
 </head>
@@ -102,29 +168,130 @@
                    autocomplete="off"
                    aria-label="Search music tracks">
         </div>
-        
         <div id="results"></div>
     </div>
 
+    <div class="selection-panel">
+        <h3>Selected Tracks (<span id="selectedCount">0</span>)</h3>
+        <div id="selected-list"></div>
+        <button id="process-btn" onclick="processSelection()">Process Selected Tracks</button>
+    </div>
+
     <script>
-        // Оригинальный JavaScript код с debounce остается без изменений
-        const debounce = (func, delay) => {
-            let timeout;
-            return (...args) => {
-                clearTimeout(timeout);
-                timeout = setTimeout(() => func.apply(this, args), delay);
-            };
-        };
+        // Исправленная функция отображения треков
+        function renderResults(results) {
+            return results.map(track => `
+                <div class="track-item ${track.is_selected ? 'selected' : ''}" 
+                    onclick="toggleSelection(${JSON.stringify(track).replace(/"/g, '&quot;')})">
+                    <div class="track-info">
+                        <div class="track-title">${track.track_name}</div>
+                        <div class="track-artist">${track.artists}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
 
-        const searchInput = document.getElementById('searchInput');
-        const resultsDiv = document.getElementById('results');
-
-        const updateResults = async (query) => {
-            if(query.length < 2) {
-                resultsDiv.innerHTML = '';
-                return;
+        // Исправленный обработчик выбора/снятия выбора трека
+        async function toggleSelection(track) {
+            const card = event.target.closest('.track-item');
+            if (card) {
+                  card.style.transform = 'scale(0.98)';
+                  setTimeout(() => card.style.transform = '', 200);
             }
+            try {
+                const action = track.is_selected ? 'remove' : 'add';
+                const endpoint = action === 'add' ? '/add_to_selection' : '/remove_from_selection';
+                
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(action === 'add' ? track : {track_id: track.track_id})
+                });
+
+                if (!response.ok) throw new Error('Request failed');
+                
+                await updateSearchResults();
+                await updateSelectionUI();
+            } catch (error) {
+                console.error('Selection error:', error);
+                alert('Error updating selection');
+            }
+        }
+        // Обработка выбранных треков
+        async function processSelection() {
+            try {
+                const btn = document.getElementById('process-btn');
+                btn.disabled = true;
+                btn.innerHTML = 'Processing... <div class="spinner"></div>';
+                
+                const response = await fetch('/process', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if(result.status === 'success') {
+                    showNotification(`✅ Successfully processed ${result.processed_tracks} tracks!`, 'success');
+                    // Дополнительные действия после успешной обработки
+                } else {
+                    showNotification(`❌ Error: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                console.error('Processing error:', error);
+                showNotification('🚨 Critical error during processing', 'error');
+            } finally {
+                const btn = document.getElementById('process-btn');
+                btn.disabled = false;
+                btn.innerHTML = 'Process Selected Tracks';
+            }
+        }
+
+        // Функция для отображения уведомлений
+        function showNotification(message, type) {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
             
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+        }
+        // Исправленная функция обновления списка выбранных треков
+        async function updateSelectionUI() {
+                try {
+                    const response = await fetch('/get_selection');
+                    const selectedTracks = await response.json();
+                    
+                    const selectedList = document.getElementById('selected-list');
+                    const selectedCount = document.getElementById('selectedCount');
+                    
+                    // Исправлен синтаксис в строке с обработчиком удаления
+                    selectedList.innerHTML = selectedTracks.map(track => `
+                        <div class="selected-track">
+                            <span>${track.track_name} - ${track.artists}</span>
+                            <span class="remove-btn" 
+                                  onclick="toggleSelection(${JSON.stringify(track).replace(/"/g, '&quot;')})">×</span>
+                        </div>
+                    `).join('');
+
+                    selectedCount.textContent = selectedTracks.length;
+                } catch (error) {
+                    console.error('Error updating selection UI:', error);
+                }
+            }
+
+        // Обновление результатов поиска
+        async function updateSearchResults() {
+            const loader = `<div class="loader">🔍 </div>`;
+            resultsDiv.innerHTML = loader;
+            const query = document.getElementById('searchInput').value;
+            if (query.length < 2) return;
+
             try {
                 const response = await fetch('/search', {
                     method: 'POST',
@@ -135,26 +302,74 @@
                 });
                 
                 const results = await response.json();
-                
                 resultsDiv.innerHTML = results.length > 0 
-                    ? results.map(track => `
-                        <div class="track-item">
-                            <div class="track-info">
-                                <div class="track-title">${track.track_name}</div>
-                                <div class="track-artist">${track.artists}</div>
-                            </div>
-                        </div>`).join('')
+                    ? renderResults(results)
                     : '<div class="no-results">No matching tracks found</div>';
                     
             } catch (error) {
                 console.error('Search error:', error);
-                resultsDiv.innerHTML = '<div class="error-message">Error loading results. Please try again.</div>';
+                resultsDiv.innerHTML = '<div class="error-message">Error loading results</div>';
             }
+        }
+
+
+        // Инициализация
+        // Добавим стили для уведомлений
+        const style = document.createElement('style');
+        style.textContent = `
+            .notification {
+                position: fixed;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                padding: 15px 25px;
+                border-radius: 8px;
+                font-weight: 500;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 1000;
+            }
+            .success {
+                background: #4CAF50;
+                color: white;
+            }
+            .error {
+                background: #f44336;
+                color: white;
+            }
+            .spinner {
+                display: inline-block;
+                width: 1em;
+                height: 1em;
+                border: 2px solid rgba(255,255,255,0.3);
+                border-radius: 50%;
+                border-top-color: #fff;
+                animation: spin 1s linear infinite;
+            }
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
+        const resultsDiv = document.getElementById('results');
+        const searchInput = document.getElementById('searchInput');
+        const debounce = (func, delay) => {
+            let timeout;
+            return (...args) => {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), delay);
+            };
         };
 
-        searchInput.addEventListener('input', debounce(e => {
-            updateResults(e.target.value.trim());
-        }, 300));
+        // Инициализация при загрузке
+        document.addEventListener('DOMContentLoaded', async () => {
+            await updateSelectionUI();
+            searchInput.addEventListener('input', debounce(async (e) => {
+                await updateSearchResults();
+            }, 300));
+        });
+
+
+        
     </script>
 </body>
 </html>
