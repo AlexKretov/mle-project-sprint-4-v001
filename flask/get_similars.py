@@ -1,5 +1,5 @@
 # main.py
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 import boto3
 import pandas as pd
 import os
@@ -139,11 +139,25 @@ async def load_data():
 
 
 
-
+@app.post("/test")
+async def test_endpoint(data: dict = Body(...)):
+    print(f"Received track IDs: {data['track_ids']}")
+    got_ids = data['track_ids']
+    last = got_ids[-3:]
+    similar_ids = cached_similarities.query('item_id_1 in @last').nlargest(3, 'score')['item_id_2'].to_list()
+    similar_ids = [x for x in similar_ids if x not in got_ids][:3]
+    print(f"[5] Similar track IDs: {similar_ids}")
+    
+    return {
+        "status": "processed",
+        "track_ids": similar_ids
+    }
 
 @app.post("/recommend")
 async def recommend(track_ids: List[int]):
-    print(f"[1] Received request with track_ids: {track_ids}")
+#async def recommend(request_json):
+    #track_ids = request_json['track_ids']
+    #print(f"[1] Received request with track_ids: {track_ids}")
     
     try:
         # Загрузка данных
@@ -165,7 +179,8 @@ async def recommend(track_ids: List[int]):
         cool_results = [(row['track_name'], row['artists']) for _, row in results.iterrows()]
         print(f"[7] Final results: {cool_results}")
         
-        return {"recommendations": cool_results}
+        #return {"recommendations": cool_results}
+        return {"track_ids": similar_ids}
         
     except Exception as e:
         import traceback

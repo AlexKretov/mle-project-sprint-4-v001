@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>Music Selector Pro</title>
+    
     <style>
         body {
             font-family: 'Segoe UI', system-ui, sans-serif;
@@ -176,7 +177,53 @@
         <div id="selected-list"></div>
         <button id="process-btn" onclick="processSelection()">Process Selected Tracks</button>
     </div>
-
+    <div id="recommendations-section" style="margin: 20px; display: none;">
+        <h3 style="color: #2c3e50;">Рекомендованные треки на основании последних трёх выбранных треков</h3>
+        <div class="table-container" style="overflow-x: auto;">
+            <table id="recommendations-table" class="recommendation-table">
+                <thead>
+                    <tr>
+                        <th>Название трека</th>
+                        <th>Исполнитель</th>
+                    </tr>
+                </thead>
+                <tbody id="recommendations-body">
+                    <!-- Данные будут здесь -->
+                </tbody>
+            </table>
+        </div>
+        <p id="no-recommendations" style="display: none; color: #7f8c8d;">Рекомендации не найдены</p>
+    </div>
+    
+    <style>
+    .recommendation-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 15px 0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    }
+    
+    .recommendation-table th {
+        background-color: #3498db;
+        color: white;
+        padding: 12px;
+        text-align: left;
+    }
+    
+    .recommendation-table td {
+        padding: 10px;
+        border-bottom: 1px solid #ecf0f1;
+    }
+    
+    .recommendation-table tr:hover {
+        background-color: #f8f9f9;
+    }
+    
+    .table-container {
+        border-radius: 6px;
+        border: 1px solid #bdc3c7;
+    }
+    </style>
     <script>
         // Исправленная функция отображения треков
         function renderResults(results) {
@@ -234,7 +281,8 @@
                 const result = await response.json();
                 
                 if(result.status === 'success') {
-                    showNotification(`✅ Successfully processed ${result.processed_tracks} tracks!`, 'success');
+                    //showNotification(`✅ Successfully processed ${result.processed_tracks} tracks!`, 'success');
+                    showNotification(`✅ We recommend ${result.track_ids} !`, 'YES!');
                     // Дополнительные действия после успешной обработки
                 } else {
                     showNotification(`❌ Error: ${result.message}`, 'error');
@@ -371,5 +419,48 @@
 
         
     </script>
+    <script>
+        async function processSelection() {
+            try {
+                const response = await fetch('/process', {method: 'POST'});
+                const result = await response.json();
+                
+                const container = document.getElementById('recommendations-section');
+                const tbody = document.getElementById('recommendations-body');
+                const noResults = document.getElementById('no-recommendations');
+        
+                tbody.innerHTML = '';
+                container.style.display = 'block';
+                
+                if(result.status === 'success' && result.recommendations.length > 0) {
+                    noResults.style.display = 'none';
+                    result.recommendations.forEach(track => {
+                        const row = document.createElement('tr');
+                        
+                        row.innerHTML = `
+                            <td>${escapeHTML(track[0])}</td>
+                            <td>${escapeHTML(track[1])}</td>
+                        `;
+                        
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    noResults.style.display = 'block';
+                }
+            } catch(error) {
+                console.error('Ошибка:', error);
+                showNotification('Ошибка получения данных', 'error');
+            }
+        }
+        
+        // Экранирование HTML-символов
+        function escapeHTML(str) {
+            return str.replace(/&/g, '&amp;')
+                     .replace(/</g, '&lt;')
+                     .replace(/>/g, '&gt;')
+                     .replace(/"/g, '&quot;')
+                     .replace(/'/g, '&#039;');
+        }
+        </script>
 </body>
 </html>

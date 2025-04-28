@@ -61,40 +61,45 @@ def get_selection():
 @app.route('/process', methods=['POST'])
 def process_selected_tracks():
     try:
-        # Добавляем детальное логирование
-        app.logger.debug(f"Session data: {dict(session)}")
-        
-        # Получаем track_ids из сессии с проверкой
         selected_tracks = session.get('selected_tracks', [])
-        app.logger.debug(f"Raw selected tracks: {selected_tracks}")
-        
-        if not isinstance(selected_tracks, list):
-            app.logger.error("Invalid session data format")
-            return jsonify({'status': 'error', 'message': 'Session data corrupted'}), 500
-        
         track_ids = [t['track_id'] for t in selected_tracks if 'track_id' in t]
-        app.logger.debug(f"Extracted track IDs: {track_ids}")
-        
-        if not track_ids:
-            return jsonify({
-                'status': 'error',
-                'message': 'No valid tracks selected',
-                'session_data': list(session.keys())
-            }), 400
 
-        # Тестовый ответ вместо реального микросервиса
+        # Запрос к микросервису
+        try:
+            response = requests.post(
+                "http://127.0.0.1:8000/test",
+                json={"track_ids": track_ids},
+                timeout=10
+            )
+            response.raise_for_status()
+            recommended_data = response.json() if response.headers.get('Content-Type') == 'application/json' else {"track_ids": []}
+        
+        except requests.exceptions.RequestException as e:
+            app.logger.error(f"Ошибка соединения: {str(e)}")
+            return jsonify({'status': 'error', 'message': 'Сервис недоступен'}), 503
+
+        # Безопасный запрос к БД
+        conn = get_connection()
+        c = conn.cursor()
+        try:
+            c.execute(
+                "SELECT track_name, artists FROM tracks WHERE track_id = ANY(%s)",
+                (recommended_data['track_ids'],)
+            )
+            results = [[row[0], row[1]] for row in c.fetchall()]
+        finally:
+            conn.close()
+
         return jsonify({
             'status': 'success',
             'processed_tracks': len(track_ids),
-            'track_ids': track_ids
+            'recommendations': results  # Данные в формате [[name, artist], ...]
         })
 
     except Exception as e:
-        app.logger.error(f"Processing error: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': f'Internal error: {str(e)}'
-        }), 500
+        app.logger.error(f"Ошибка обработки: {str(e)}")
+        return jsonify({'status': 'error', 'message': 'Внутренняя ошибка сервера'}), 500
+
 @app.route('/remove_from_selection', methods=['POST'])
 def remove_from_selection():
     track_id = request.json['track_id']
