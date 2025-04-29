@@ -1,5 +1,5 @@
 # main.py
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Body, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,7 +25,7 @@ class Config:
         }
     }
     CACHE_SIZE = 100
-
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 # Хранилище данных
 class DataStore:
     def __init__(self):
@@ -64,15 +64,6 @@ async def initialize_data():
             aws_secret_access_key=Config.S3["secret_key"]
         ) as s3_client:
             
-            # Загрузка метаданных треков
-            buffer = BytesIO()
-            await s3_client.download_fileobj(
-                Bucket=Config.S3["bucket"],
-                Key=Config.S3["paths"]["tracks"],
-                Fileobj=buffer
-            )
-            buffer.seek(0)
-            data_store.tracks = pd.read_parquet(buffer)
             
             # Загрузка предвычисленных предсказаний
             pred_buffer = BytesIO()
@@ -82,10 +73,11 @@ async def initialize_data():
                 Fileobj=pred_buffer
             )
             pred_buffer.seek(0)
+            global data_store
             data_store.predictions = pd.read_parquet(pred_buffer)
 
         data_store.logger.info("Data loading completed")
-        
+        logging.debug(f"Data loading completed: {len(data_store.predictions)}")
     except Exception as e:
         data_store.logger.error(f"Data loading failed: {str(e)}")
         raise RuntimeError("Initialization failed")
@@ -97,7 +89,7 @@ async def render_interface(request: Request):
     return """
     <html>
         <head>
-            <title>Music Recommender</title>
+            <title>CB-recomedator. Send response elsewhere</title>
             <style>
                 body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; }
                 .container { padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
@@ -106,60 +98,19 @@ async def render_interface(request: Request):
                 #results { margin-top: 20px; }
                 .track { padding: 10px; border-bottom: 1px solid #eee; }
             </style>
-        </head>
-        <body>
+                    <body>
             <div class="container">
-                <h1>Music Track Recommender</h1>
-                <input type="text" id="userIds" placeholder="Enter User IDs (e.g. 1374582)">
-                <button onclick="getRecommendations()">Get Recommendations</button>
-                <div id="results"></div>
+                <h1>Здесь ничего сделать нельзя, запросы отправляются с другой веб-странцицы</h1>
             </div>
-            
-            <script>
-                function getRecommendations() {
-                    const input = document.getElementById('userIds').value;
-                    const userIds = input.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
-                    
-                    if(userIds.length === 0) {
-                        alert("Please enter valid User IDs");
-                        return;
-                    }
-
-                    fetch('/recommend', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(userIds)
-                    })
-                    .then(response => {
-                        if(!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                        return response.json();
-                    })
-                    .then(data => {
-                        const resultsDiv = document.getElementById('results');
-                        resultsDiv.innerHTML = data.recommendations
-                            .map(track => `
-                                <div class="track">
-                                    <strong>${track.title}</strong> - ${track.artist}
-                                </div>
-                            `)
-                            .join('');
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('Error getting recommendations: ' + error.message);
-                    });
-                }
-            </script>
         </body>
+        </head>
+
     </html>
     """
 
 @app.post("/recommend")
 async def generate_recommendations(
-    user_ids: conlist(int, min_items=1, max_items=5)
-) -> JSONResponse:
+    data: dict = Body(...)): 
     """Генерация рекомендаций для пользователя"""
     try:
         # Валидация данных
@@ -167,29 +118,21 @@ async def generate_recommendations(
         #    raise HTTPException(503, "Service initializing")
 
         # Основная логика
-        main_user_id = user_ids[0]
-        
+        main_user_id = data['user_id']
+        logging.debug(f"Generating recommendations for user: {main_user_id}")
         # Поиск рекомендаций
+        ascii
         predictions = data_store.predictions[
             data_store.predictions.user_id == main_user_id
         ]
-        
+        logging.debug(f"Dataset for this user is that long: {len(predictions)}")
         if predictions.empty:
-            return JSONResponse({"recommendations": []})
+            return JSONResponse({"status": "empty","recommendations": []})
         
-        top_tracks = predictions.nlargest(7, 'cb_score')['track_id'].tolist()
+        top_tracks = predictions.nlargest(10, 'cb_score')['track_id'].tolist()
+        logging.debug(f"Got top tracks {top_tracks}")
         
-        # Форматирование результатов
-        results = data_store.tracks[
-            data_store.tracks.track_id.isin(top_tracks)
-        ][['track_name', 'artists']]
-        
-        recommendations = [
-            {"title": row.track_name, "artist": row.artists}
-            for row in results.itertuples()
-        ]
-        
-        return JSONResponse({"recommendations": recommendations})
+        return JSONResponse({"status": "processed","track_ids": top_tracks})
 
     except HTTPException:
         raise

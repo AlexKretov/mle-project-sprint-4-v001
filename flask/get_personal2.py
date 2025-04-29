@@ -17,6 +17,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from io import BytesIO
 import aioboto3  # <-- Исправлено здесь
+import logging
+
 
 app = FastAPI()
 #app.add_middleware(
@@ -62,17 +64,16 @@ S3_CONFIG = {
     #"key": "recsys/data/similar.parquet"
 }
 # Глобальная переменная для кеширования данных
-cached_similarities = None
+recommedations = None
 def preload_data():
     """Синхронная обертка для асинхронной загрузки данных"""
     import asyncio
     asyncio.run(load_data())
 
 async def load_data():
-    global cached_similarities
-    global tracks
+    global recommedations
     # Если данные уже загружены - пропускаем
-    if cached_similarities is not None:
+    if recommedations is not None:
         return
 
     client_config = {
@@ -87,25 +88,31 @@ async def load_data():
 
     async with aioboto3.Session().client(**client_config) as s3:
         #s3.download_fileobj(Bucket='s3-student-mle-20250130-833968fcc1', Key='recsys/data/similar_items.parquet', Fileobj=buffer)
-        await s3.download_fileobj(Bucket='s3-student-mle-20250130-833968fcc1', Key='recsys/data/similar_items.parquet', Fileobj=buffer)
+        await s3.download_fileobj(Bucket='s3-student-mle-20250130-833968fcc1', Key='recsys/data/cb_predictions.parquet', Fileobj=buffer)
         buffer.seek(0)
-        cached_similarities = pd.read_parquet(buffer)
+        recommedations = pd.read_parquet(buffer)
 
 
 
 
-@app.post("/test")
+@app.post("/recommend")
 async def test_endpoint(data: dict = Body(...)):
-    print(f"Received track IDs: {data['track_ids']}")
-    got_ids = data['track_ids']
-    last = got_ids[-3:]
-    similar_ids = cached_similarities.query('item_id_1 in @last').nlargest(3, 'score')['item_id_2'].to_list()
-    similar_ids = [x for x in similar_ids if x not in got_ids][:3]
-    print(f"[5] Similar track IDs: {similar_ids}")
+    print(f"Generating recommendations for user: {data['user_id']}")
+    logging.debug(f"Generating recommendations for user: {data['user_id']}")
+    user_id = data['user_id']
+    logging.debug(f"[1] Loading data: {len(recommedations)}")
+    print(f"[1] Loading data: {len(recommedations)}")
+    cb_recommedations = recommedations[recommedations['user_id'] == user_id]
+    print(f"[2] CB recommendations: {len(cb_recommedations)}")
+    logging.debug(f"[2] CB recommendations: {len(cb_recommedations)}")
+    recd_ids = cb_recommedations.nlargest(10, 'cb_score')['track_id'].to_list()
+    print(f"[3] Recd track IDs: {recd_ids}")
+    logging.debug(f"[3] Recd track IDs: {recd_ids}")
+
     
     return {
         "status": "processed",
-        "track_ids": similar_ids
+        "track_ids": recd_ids
     }
 
 
@@ -113,4 +120,4 @@ if __name__ == "__main__":
     import uvicorn
     preload_data()
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=7000)

@@ -161,6 +161,28 @@
     </style>
 </head>
 <body>
+    <div class="auth-bar">
+        <input type="text" id="userId" placeholder="Enter User ID" class="user-input">
+        <button onclick="handleLogin()" class="login-btn">Log In</button>
+        <span id="userStatus"></span>
+    </div>
+    <div id="recommendations-section" style="margin: 20px; display: none;">
+        <h3 style="color: #2c3e50;">Рекомендованные треки на основании пользовательского опыта</h3>
+        <div class="table-container" style="overflow-x: auto;">
+            <table id="recommendations-table" class="recommendation-table">
+                <thead>
+                    <tr>
+                        <th>Название трека</th>
+                        <th>Исполнитель</th>
+                    </tr>
+                </thead>
+                <tbody id="recommendations-body">
+                    <!-- Данные будут здесь -->
+                </tbody>
+            </table>
+        </div>
+        <p id="no-recommendations" style="display: none; color: #7f8c8d;">Рекомендации не найдены</p>
+    </div>
     <div class="search-container">
         <div class="search-box">
             <input type="text" 
@@ -223,8 +245,71 @@
         border-radius: 6px;
         border: 1px solid #bdc3c7;
     }
+    .auth-bar {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .user-input {
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        width: 150px;
+    }
+
+    .login-btn {
+        padding: 8px 16px;
+        background: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.3s;
+    }
+
+    .login-btn:hover {
+        background: #45a049;
+    }
+
+    #userStatus {
+        color: #666;
+        font-size: 0.9em;
+    }
     </style>
     <script>
+        async function handleLogin() {
+            const userId = document.getElementById('userId').value;
+            if (!userId) {
+                showNotification('Please enter User ID', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ user_id: userId })
+                });
+
+                const result = await response.json();
+                if (result.status === 'success') {
+                    document.getElementById('userStatus').textContent = `Logged in as: ${result.recommendations}`;
+                    await updateSelectionUI();
+                    showNotification('Login successful', 'success');
+
+                } else {
+                    showNotification(result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showNotification('Login failed', 'error');
+            }
+        }
         // Исправленная функция отображения треков
         function renderResults(results) {
             return results.map(track => `
@@ -233,6 +318,10 @@
                     <div class="track-info">
                         <div class="track-title">${track.track_name}</div>
                         <div class="track-artist">${track.artists}</div>
+                        
+                        </div>
+                    <span class="remove-btn" 
+                                  onclick="toggleSelection(${JSON.stringify(track).replace(/"/g, '&quot;')})">×</span>
                     </div>
                 </div>
             `).join('');
@@ -264,38 +353,7 @@
                 alert('Error updating selection');
             }
         }
-        // Обработка выбранных треков
-        async function processSelection() {
-            try {
-                const btn = document.getElementById('process-btn');
-                btn.disabled = true;
-                btn.innerHTML = 'Processing... <div class="spinner"></div>';
-                
-                const response = await fetch('/process', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                });
-                
-                const result = await response.json();
-                
-                if(result.status === 'success') {
-                    //showNotification(`✅ Successfully processed ${result.processed_tracks} tracks!`, 'success');
-                    showNotification(`✅ We recommend ${result.track_ids} !`, 'YES!');
-                    // Дополнительные действия после успешной обработки
-                } else {
-                    showNotification(`❌ Error: ${result.message}`, 'error');
-                }
-            } catch (error) {
-                console.error('Processing error:', error);
-                showNotification('🚨 Critical error during processing', 'error');
-            } finally {
-                const btn = document.getElementById('process-btn');
-                btn.disabled = false;
-                btn.innerHTML = 'Process Selected Tracks';
-            }
-        }
+
 
         // Функция для отображения уведомлений
         function showNotification(message, type) {
@@ -322,8 +380,6 @@
                     selectedList.innerHTML = selectedTracks.map(track => `
                         <div class="selected-track">
                             <span>${track.track_name} - ${track.artists}</span>
-                            <span class="remove-btn" 
-                                  onclick="toggleSelection(${JSON.stringify(track).replace(/"/g, '&quot;')})">×</span>
                         </div>
                     `).join('');
 
@@ -462,5 +518,6 @@
                      .replace(/'/g, '&#039;');
         }
         </script>
+        
 </body>
 </html>

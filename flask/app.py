@@ -1,11 +1,14 @@
-from flask import Flask, request, render_template, jsonify, session
+from flask import Flask, request, render_template, jsonify, session, app
 import psycopg2
+import logging
 import requests
 from dotenv import load_dotenv
 import os
 import datetime
 
 app = Flask(__name__)
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 app.secret_key = os.urandom(24)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_PERMANENT'] = False
@@ -103,7 +106,7 @@ def process_selected_tracks():
 @app.route('/remove_from_selection', methods=['POST'])
 def remove_from_selection():
     track_id = request.json['track_id']
-    
+    print(track_id)
     if 'selected_tracks' in session:
         session['selected_tracks'] = [t for t in session['selected_tracks'] if t['track_id'] != track_id]
         session.modified = True
@@ -115,7 +118,51 @@ def remove_from_selection():
 @app.route('/')
 def search_page():
     return render_template('search.html')
+@app.route('/login', methods=['POST'])
+def login():
+        user_id = request.json.get('user_id')
+        logging.debug(f"Received user_id from request: {user_id}")
+        if not user_id:
+            return jsonify({'status': 'error', 'message': 'User ID is required'}), 400
+        # Запрос к микросервису
+        print(f"Received track User_id: {user_id}")
+        
+        try:
+            response = requests.post(
+                f"http://127.0.0.1:7000/recommend",
+                json={'user_id': user_id},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                print(data.get('track_ids', []))
+            else:
+                response.raise_for_status()
+                
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error connecting to microservice: {e}")
+            return jsonify({'status': 'error', 'message': 'Error connecting to microservice'}), 500    
 
+        
+
+        # Безопасный запрос к БД
+        conn = get_connection()
+        c = conn.cursor()
+        try:
+            c.execute(
+                "SELECT track_name, artists FROM tracks WHERE track_id = ANY(%s)",
+                recommended_data['track_ids']
+            )
+            results = [[row[0], row[1]] for row in c.fetchall()]
+        finally:
+            conn.close()
+        logging.debug(f"Received data from database: {results}")
+        return jsonify({
+            'status': 'success',
+            'user_id': user_id,
+            'recommendations': results  # Данные в формате [[name, artist], ...]
+        })
 @app.route('/search', methods=['POST'])
 def search():
     query = request.form['query']
